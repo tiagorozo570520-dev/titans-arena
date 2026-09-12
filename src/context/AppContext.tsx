@@ -186,7 +186,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (players.some((p) => p.email.toLowerCase() === data.email.toLowerCase() || p.gamertag.toLowerCase() === data.gamertag.toLowerCase())) {
         return false;
       }
-      const nextNum = players.length + 1;
+      const nums = players.map((p) => parseInt(String(p.titansId || "").replace(/\D/g, ""), 10) || 0);
+const nextNum = Math.max(0, ...nums) + 1;
       const newPlayer: Player = {
         id: `p${Date.now()}`,
         titansId: `TITANS-${String(nextNum).padStart(4, "0")}`,
