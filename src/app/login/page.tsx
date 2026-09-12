@@ -73,9 +73,7 @@ export default function LoginPage() {
             ENTRAR
           </button>
 
-          <p className="text-xs text-center text-[var(--titans-muted)]">
-            Demo: usa <strong>shadow@titans.gg</strong> o <strong>admin</strong> (cualquier contraseña)
-          </p>
+          
         </form>
 
         <p className="text-center text-sm text-[var(--titans-muted)] mt-6">

@@ -81,7 +81,7 @@ export default function Navbar() {
                 {currentUser.isAdmin && (
                   <Link
                     href="/admin"
-                    className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[rgba(0,212,255,0.1)] text-[var(--titans-blue)] border border-[rgba(0,212,255,0.25)] hover:bg-[rgba(0,212,255,0.2)] transition"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[rgba(0,212,255,0.1)] text-[var(--titans-blue)] border border-[rgba(0,212,255,0.25)] hover:bg-[rgba(0,212,255,0.2)] transition"
                   >
                     ⚙️ ADMIN
                   </Link>
