@@ -97,11 +97,7 @@ export default function Bracket({
                               ? String(vuelta ? ga : ida.scoreA)
                               : "–"
                           }
-                          win={
-                            ida.status === "confirmed" &&
-                            ((vuelta ? ga > gb : (ida.scoreA ?? 0) > (ida.scoreB ?? 0)) ||
-                              (pen && (pen.scoreA ?? 0) > (pen.scoreB ?? 0) && pen.playerAId === a))
-                          }
+                                                    win={ida.status === "confirmed" && ga > gb}
                         />
                         <Row
                           name={nameOf(b)}
@@ -110,13 +106,7 @@ export default function Bracket({
                               ? String(vuelta ? gb : ida.scoreB)
                               : "–"
                           }
-                          win={
-                            ida.status === "confirmed" &&
-                            ((vuelta ? gb > ga : (ida.scoreB ?? 0) > (ida.scoreA ?? 0)) ||
-                              (pen &&
-                                ((pen.playerBId === b && (pen.scoreB ?? 0) > (pen.scoreA ?? 0)) ||
-                                  (pen.playerAId === b && (pen.scoreA ?? 0) > (pen.scoreB ?? 0))))
-                          }
+                                                    win={ida.status === "confirmed" && gb > ga}
                         />
                         <div className="text-[9px] text-center text-[var(--titans-muted)] py-1 border-t border-white/5">
                           {pen ? `Penales ${pen.scoreA ?? "-"}-${pen.scoreB ?? "-"}` : simple === "vs" ? "Pendiente" : `Global ${simple}`}
