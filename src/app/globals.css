@@ -1,0 +1,359 @@
+@import "tailwindcss";
+
+:root {
+  --titans-black: #050508;
+  --titans-dark: #0a0b10;
+  --titans-card: #12131a;
+  --titans-gold: #d4af37;
+  --titans-gold-light: #f0d78c;
+  --titans-blue: #00d4ff;
+  --titans-blue-dark: #0099cc;
+  --titans-silver: #c0c0c0;
+  --titans-white: #f5f5f7;
+  --titans-muted: #8a8b96;
+  --titans-success: #22c55e;
+  --titans-warning: #eab308;
+  --titans-danger: #ef4444;
+  --titans-border: rgba(212, 175, 55, 0.15);
+  --titans-glow: 0 0 20px rgba(0, 212, 255, 0.3);
+  --titans-glow-gold: 0 0 25px rgba(212, 175, 55, 0.25);
+}
+
+@theme inline {
+  --color-background: var(--titans-black);
+  --color-foreground: var(--titans-white);
+  --font-sans: var(--font-titans-sans), var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--titans-black);
+  color: var(--titans-white);
+  font-family: var(--font-titans-sans), system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  letter-spacing: 0.01em;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-titans-display), var(--font-titans-sans), sans-serif;
+}
+
+.arena-bg {
+  background-color: #050508;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 212, 255, 0.12), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(212, 175, 55, 0.07), transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
+}
+
+.arena-bg::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  opacity: 0.04;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.35) 3px
+  );
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0b10;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #d4af37, #00d4ff);
+  border-radius: 4px;
+}
+
+/* Glassmorphism utilities */
+.glass {
+  background: rgba(18, 19, 26, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.12);
+}
+
+.glass-strong {
+  background: rgba(10, 11, 16, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(212, 175, 55, 0.18);
+}
+
+/* Premium card */
+.titans-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+    linear-gradient(145deg, #14151e 0%, #0b0c12 100%);
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  border-radius: 16px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(0, 212, 255, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.titans-card:hover {
+  border-color: rgba(0, 212, 255, 0.35);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.65),
+    0 0 32px rgba(0, 212, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-3px);
+}
+
+/* Glow effects */
+.glow-blue {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.25);
+}
+.glow-gold {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.25);
+}
+
+/* Text gradients */
+.text-gold {
+  background: linear-gradient(135deg, #f0d78c 0%, #d4af37 50%, #b8960c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-blue {
+  background: linear-gradient(135deg, #67e8f9 0%, #00d4ff 50%, #0099cc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Buttons */
+.btn-titans {
+  background: linear-gradient(135deg, #f0d78c 0%, #d4af37 45%, #8a6d12 100%);
+  color: #050508;
+  font-weight: 700;
+  padding: 0.75rem 1.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 230, 150, 0.35);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+  font-family: var(--font-titans-display), sans-serif;
+}
+
+.btn-titans:hover {
+  background: linear-gradient(135deg, #f0d78c 0%, #d4af37 100%);
+  box-shadow: 0 0 25px rgba(212, 175, 55, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-titans-outline {
+  background: transparent;
+  color: #d4af37;
+  font-weight: 600;
+  padding: 0.75rem 1.75rem;
+  border-radius: 10px;
+  border: 1.5px solid rgba(212, 175, 55, 0.5);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.875rem;
+}
+
+.btn-titans-outline:hover {
+  background: rgba(212, 175, 55, 0.1);
+  border-color: #d4af37;
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+.btn-blue {
+  background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+  color: #050508;
+  font-weight: 700;
+  padding: 0.75rem 1.75rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.875rem;
+}
+
+.btn-blue:hover {
+  box-shadow: 0 0 25px rgba(0, 212, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.badge-open {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-soon {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-live {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-finished {
+  background: rgba(212, 175, 55, 0.15);
+  color: #d4af37;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.4);
+  }
+}
+
+@keyframes logo-entrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) rotate(-5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2.5s ease-in-out infinite;
+}
+
+.animate-logo {
+  animation: logo-entrance 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Rank colors */
+.rank-rookie { color: #a1a1aa; }
+.rank-warrior { color: #3b82f6; }
+.rank-elite { color: #a855f7; }
+.rank-titan { color: #eab308; }
+.rank-legend { color: #ef4444; }
+.rank-god { 
+  background: linear-gradient(135deg, #f0d78c, #d4af37, #00d4ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Mobile bottom nav safe area */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Table styles for desktop */
+.titans-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.titans-table th {
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--titans-gold);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.875rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.titans-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.875rem;
+}
+
+.titans-table tr:hover td {
+  background: rgba(0, 212, 255, 0.03);
+}
+
+/* Bracket lines */
+.bracket-line {
+  position: relative;
+}
+.bracket-line::after {
+  content: "";
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  width: 20px;
+  height: 2px;
+  background: linear-gradient(90deg, #d4af37, transparent);
+}
+
+
+/* Logo TITANS: esconde el cuadrado del JPG */
+.logo-blend {
+  -webkit-mask-image: radial-gradient(ellipse 68% 68% at 50% 48%, #000 42%, transparent 72%);
+  mask-image: radial-gradient(ellipse 68% 68% at 50% 48%, #000 42%, transparent 72%);
+}
+.logo-blend img {
+  mix-blend-mode: lighten;
+}
