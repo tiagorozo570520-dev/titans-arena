@@ -21,7 +21,7 @@ import type {
   Notification,
   Rank,
 } from "@/lib/types";
-import { loadCloud, saveCloud } from "@/lib/db";
+import { loadCloud, saveCloud, findPlayerByLogin } from "@/lib/db";
 import {
   aggregateWinner,
   buildLeaguePairs,
@@ -154,21 +154,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(SESSION_KEY);
   }, [hydrated, currentUser]);
 
-  const login = useCallback((email: string, _password: string) => {
+    const login = useCallback(async (email: string, _password: string) => {
     const q = email.trim().toLowerCase();
-    const user =
+    const fromCloud = await findPlayerByLogin(q);
+    const local =
       players.find((p) => p.email.toLowerCase() === q) ||
       players.find((p) => p.gamertag.toLowerCase() === q);
+    const user = fromCloud || local;
     if (user) {
       setCurrentUser(user);
+      setPlayers((prev) => (prev.some((p) => p.id === user.id) ? prev : [...prev, user]));
       return true;
-    }
-    if (q === "admin" || q === "admin@titans.gg") {
-      const admin = players.find((p) => p.isAdmin) || players[0];
-      if (admin) {
-        setCurrentUser(admin);
-        return true;
-      }
     }
     return false;
   }, [players]);

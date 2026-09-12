@@ -302,3 +302,37 @@ export async function saveCloud(dump: CloudDump) {
   ].filter(Boolean);
   await Promise.all(ops);
 }
+export async function findPlayerByLogin(q: string) {
+  const { supabase, supabaseEnabled } = await import("./supabase");
+  if (!supabaseEnabled || !supabase) return null;
+  const needle = q.trim().toLowerCase();
+  const { data, error } = await supabase.from("players").select("*");
+  if (error || !data) return null;
+  const found = data.find((r: { email?: string; gamertag?: string }) =>
+    String(r.email || "").toLowerCase() === needle ||
+    String(r.gamertag || "").toLowerCase() === needle
+  );
+  if (!found) return null;
+  return {
+    id: String(found.id),
+    titansId: String(found.titans_id || ""),
+    gamertag: String(found.gamertag || ""),
+    email: String(found.email || ""),
+    phone: found.phone || undefined,
+    platform: found.platform || "PS5",
+    country: String(found.country || ""),
+    rank: found.rank || "ROOKIE",
+    points: Number(found.points || 0),
+    wins: Number(found.wins || 0),
+    losses: Number(found.losses || 0),
+    draws: Number(found.draws || 0),
+    matches: Number(found.matches || 0),
+    goals: Number(found.goals || 0),
+    goalsAgainst: Number(found.goals_against || 0),
+    titles: Number(found.titles || 0),
+    trophies: Array.isArray(found.trophies) ? found.trophies : [],
+    currentStreak: Number(found.current_streak || 0),
+    isAdmin: Boolean(found.is_admin),
+    createdAt: String(found.created_at || ""),
+  };
+}
