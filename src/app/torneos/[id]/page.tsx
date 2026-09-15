@@ -6,6 +6,7 @@ import { useApp } from "@/context/AppContext";
 import type { TournamentStatus } from "@/lib/types";
 import { computeStandings } from "@/lib/engine";
 import Bracket from "@/components/Bracket";
+import { enrolledCount } from "@/lib/enrollCount";
 
 const statusMap: Record<TournamentStatus, { label: string; class: string }> = {
   open: { label: "INSCRIPCIONES ABIERTAS", class: "badge-open" },
@@ -56,7 +57,10 @@ export default function TournamentDetailPage({
     .filter((e) => e.tournamentId === id && e.teamId)
     .map((e) => e.teamId!);
 
-  const handleEnroll = () => {
+  const inscribed = enrolledCount(id, enrollments);
+  const roster = enrollments.filter((e) => e.tournamentId === id);
+
+  const handleEnroll = async () => {
     if (!isLoggedIn) {
       setMessage({ type: "error", text: "Debes iniciar sesión para inscribirte" });
       return;
@@ -65,7 +69,7 @@ export default function TournamentDetailPage({
       setMessage({ type: "error", text: "Selecciona un equipo" });
       return;
     }
-    const result = enrollInTournament(id, selectedTeam || undefined);
+    const result = await enrollInTournament(id, selectedTeam || undefined);
     setMessage({
       type: result.success ? "success" : "error",
       text: result.message,
@@ -124,9 +128,9 @@ export default function TournamentDetailPage({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white/5 rounded-xl p-3 text-center">
               <div className="text-xl font-bold">
-                {tournament.currentPlayers}/{tournament.maxPlayers}
+                {inscribed}/{tournament.maxPlayers}
               </div>
-              <div className="text-[10px] text-[var(--titans-muted)] uppercase">Participantes</div>
+              <div className="text-[10px] text-[var(--titans-muted)] uppercase">Inscritos</div>
             </div>
             <div className="bg-white/5 rounded-xl p-3 text-center">
               <div className="text-xl font-bold capitalize">
@@ -147,6 +151,42 @@ export default function TournamentDetailPage({
               </div>
               <div className="text-[10px] text-[var(--titans-muted)] uppercase">Inicio</div>
             </div>
+          </div>
+
+          <div className="mt-2 mb-6">
+            <h2 className="font-bold text-gold mb-3 tracking-wide text-sm">PARTICIPANTES</h2>
+            {roster.length === 0 ? (
+              <p className="text-sm text-[var(--titans-muted)]">Nadie inscrito aún.</p>
+            ) : (
+              <div className="space-y-2">
+                {roster.map((e) => {
+                  const pl = players.find((p) => p.id === e.playerId);
+                  return (
+                    <div
+                      key={e.id}
+                      className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2"
+                    >
+                      <div className="w-9 h-9 rounded-lg overflow-hidden bg-gradient-to-br from-[var(--titans-gold)] to-[var(--titans-blue)] flex items-center justify-center text-[10px] font-bold text-black shrink-0">
+                        {pl?.avatar ? (
+                          <img src={pl.avatar} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          (pl?.gamertag || "?").slice(0, 2).toUpperCase()
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold truncate">{pl?.gamertag || e.playerId}</div>
+                        <div className="text-[10px] text-[var(--titans-muted)] font-mono">
+                          {pl?.titansId || "—"} · {pl?.country || "—"}
+                        </div>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wide text-[var(--titans-blue)]">
+                        Inscrito
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Rules toggle */}

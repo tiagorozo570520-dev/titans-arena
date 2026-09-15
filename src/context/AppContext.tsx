@@ -21,7 +21,17 @@ import type {
   Notification,
   Rank,
 } from "@/lib/types";
-import { loadCloud, saveCloud, findPlayerByLogin } from "@/lib/db";
+import {
+  loadCloud,
+  insertPlayer,
+  findPlayerByLogin,
+  insertEnrollment,
+  fetchEnrollments,
+  fetchEnrollmentsByTournament,
+  insertTournament,
+  insertMatches,
+  fetchMatchesByTournament,
+} from "@/lib/db";
 import {
   aggregateWinner,
   buildLeaguePairs,
@@ -48,10 +58,10 @@ interface AppState {
 }
 
 interface AppContextType extends AppState {
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   register: (data: Partial<Player> & { email: string; gamertag: string; password: string; phone?: string }) => boolean;
-  enrollInTournament: (tournamentId: string, teamId?: string) => { success: boolean; message: string };
+  enrollInTournament: (tournamentId: string, teamId?: string) => Promise<{ success: boolean; message: string }>;
   createTournament: (data: Partial<Tournament>) => void;
   reportResult: (matchId: string, scoreA: number, scoreB: number) => void;
   confirmResult: (matchId: string) => void;
@@ -59,7 +69,7 @@ interface AppContextType extends AppState {
   addTeam: (team: Omit<Team, "id">) => void;
   updateTeam: (id: string, data: Partial<Team>) => void;
   updatePlayer: (id: string, data: Partial<Player>) => void;
-  generateFixtures: (tournamentId: string) => { success: boolean; message: string };
+  generateFixtures: (tournamentId: string) => Promise<{ success: boolean; message: string }>;
   advanceRound: (tournamentId: string) => { success: boolean; message: string };
   finishTournament: (tournamentId: string) => { success: boolean; message: string };
   resetAllData: () => void;
@@ -113,18 +123,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (async () => {
       const cloud = await loadCloud();
       const saved = loadPersist();
-      const src = cloud && (cloud.players.length || cloud.tournaments.length) ? cloud : saved;
+      // Supabase = source of truth. localStorage = cache only if the cloud is unreachable.
+      const src = cloud || saved;
       if (!cancelled && src) {
-        setPlayers(src.players?.length ? src.players : seedPlayers);
-        setTournaments(src.tournaments || []);
-        setTeams(src.teams?.length ? src.teams : seedTeams);
-        setEnrollments(src.enrollments || []);
-        setMatches(src.matches || []);
-        setChampions(src.champions || []);
-        setNotifications(src.notifications || []);
+        if (cloud) {
+          setPlayers(cloud.players.length ? cloud.players : seedPlayers);
+          setTournaments(cloud.tournaments);
+          setTeams(cloud.teams.length ? cloud.teams : seedTeams);
+          setEnrollments(cloud.enrollments);
+          setMatches(cloud.matches);
+          setChampions(cloud.champions);
+          setNotifications(cloud.notifications);
+        } else if (saved) {
+          setPlayers(saved.players?.length ? saved.players : seedPlayers);
+          setTournaments(saved.tournaments || []);
+          setTeams(saved.teams?.length ? saved.teams : seedTeams);
+          setEnrollments(saved.enrollments || []);
+          setMatches(saved.matches || []);
+          setChampions(saved.champions || []);
+          setNotifications(saved.notifications || []);
+        }
         const sessionId = localStorage.getItem(SESSION_KEY);
+        const pool = (cloud?.players?.length ? cloud.players : src.players) || seedPlayers;
         if (sessionId) {
-          const u = (src.players || seedPlayers).find((p) => p.id === sessionId);
+          const u = pool.find((p) => p.id === sessionId);
           if (u) setCurrentUser(u);
         }
       }
@@ -145,7 +167,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notifications,
     };
     savePersist(dump);
-    saveCloud(dump).catch((err) => console.warn("Supabase save:", err));
   }, [hydrated, players, tournaments, teams, enrollments, matches, champions, notifications]);
 
   useEffect(() => {
@@ -154,7 +175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(SESSION_KEY);
   }, [hydrated, currentUser]);
 
-    const login = useCallback(async (email: string, _password: string) => {
+  const login = useCallback(async (email: string, _password: string) => {
     const q = email.trim().toLowerCase();
     const fromCloud = await findPlayerByLogin(q);
     const local =
@@ -183,9 +204,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return false;
       }
       const nums = players.map((p) => parseInt(String(p.titansId || "").replace(/\D/g, ""), 10) || 0);
-const nextNum = Math.max(0, ...nums) + 1;
+      const nextNum = Math.max(1000, ...nums) + 1;
       const newPlayer: Player = {
-        id: `p${Date.now()}`,
+        id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`,
         titansId: `TITANS-${String(nextNum).padStart(4, "0")}`,
         gamertag: data.gamertag,
         email: data.email,
@@ -207,25 +228,35 @@ const nextNum = Math.max(0, ...nums) + 1;
       };
       setPlayers((prev) => [...prev, newPlayer]);
       setCurrentUser(newPlayer);
+      insertPlayer(newPlayer).catch(() => {});
       return true;
     },
     [players]
   );
 
   const enrollInTournament = useCallback(
-    (tournamentId: string, teamId?: string) => {
+    async (tournamentId: string, teamId?: string) => {
       if (!currentUser) return { success: false, message: "Debes iniciar sesión" };
       const tournament = tournaments.find((t) => t.id === tournamentId);
       if (!tournament) return { success: false, message: "Torneo no encontrado" };
       if (tournament.status !== "open") return { success: false, message: "Inscripciones cerradas" };
-      if (tournament.currentPlayers >= tournament.maxPlayers)
-        return { success: false, message: "Torneo lleno" };
-      if (enrollments.some((e) => e.tournamentId === tournamentId && e.playerId === currentUser.id))
-        return { success: false, message: "Ya estás inscrito" };
 
+      const live = await fetchEnrollments();
+      const mine = live.filter((e) => e.tournamentId === tournamentId);
+      if (mine.some((e) => e.playerId === currentUser.id)) {
+        setEnrollments(live);
+        setTournaments((prev) =>
+          prev.map((t) => (t.id === tournamentId ? { ...t, currentPlayers: mine.length } : t))
+        );
+        return { success: false, message: "Ya estás inscrito (nube)" };
+      }
+      if (mine.length >= tournament.maxPlayers) {
+        return { success: false, message: "Torneo lleno" };
+      }
       if (tournament.useTeams && teamId) {
-        const taken = enrollments.some((e) => e.tournamentId === tournamentId && e.teamId === teamId);
-        if (taken) return { success: false, message: "Equipo ya seleccionado" };
+        if (mine.some((e) => e.teamId === teamId)) {
+          return { success: false, message: "Equipo ya seleccionado" };
+        }
       }
 
       const newEnrollment: Enrollment = {
@@ -233,31 +264,23 @@ const nextNum = Math.max(0, ...nums) + 1;
         tournamentId,
         playerId: currentUser.id,
         teamId,
-        position: tournament.currentPlayers + 1,
+        position: mine.length + 1,
         joinedAt: new Date().toISOString().slice(0, 10),
       };
-
-      setEnrollments((prev) => [...prev, newEnrollment]);
-      setTournaments((prev) =>
-        prev.map((t) =>
-          t.id === tournamentId ? { ...t, currentPlayers: t.currentPlayers + 1 } : t
-        )
-      );
-
-      const notif: Notification = {
-        id: `n${Date.now()}`,
-        userId: currentUser.id,
-        title: "Inscripción confirmada",
-        message: `Te has inscrito en ${tournament.name}`,
-        type: "tournament",
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-      setNotifications((prev) => [notif, ...prev]);
-
+      const saved = await insertEnrollment(newEnrollment);
+      if (!saved.ok) {
+        if (saved.error === "duplicate") {
+          const freshDup = await fetchEnrollments();
+          setEnrollments(freshDup);
+          return { success: false, message: "Ya estás inscrito" };
+        }
+        return { success: false, message: "No se pudo guardar: " + saved.error };
+      }
+      const fresh = await fetchEnrollments();
+      setEnrollments(fresh);
       return { success: true, message: "¡INSCRIPCIÓN CONFIRMADA!" };
     },
-    [currentUser, tournaments, enrollments]
+    [currentUser, tournaments]
   );
 
   const createTournament = useCallback((data: Partial<Tournament>) => {
@@ -289,6 +312,7 @@ const nextNum = Math.max(0, ...nums) + 1;
       createdAt: new Date().toISOString().slice(0, 10),
     };
     setTournaments((prev) => [newT, ...prev]);
+    insertTournament(newT).catch((err) => console.warn("insertTournament", err));
   }, [currentUser, teams]);
 
   const reportResult = useCallback((matchId: string, scoreA: number, scoreB: number) => {
@@ -344,17 +368,25 @@ const nextNum = Math.max(0, ...nums) + 1;
   }, []);
 
   const generateFixtures = useCallback(
-    (tournamentId: string) => {
-      const enrolled = enrollments.filter((e) => e.tournamentId === tournamentId);
+    async (tournamentId: string) => {
+      const enrolled = await fetchEnrollmentsByTournament(tournamentId);
+      setEnrollments((prev) => {
+        const others = prev.filter((e) => e.tournamentId !== tournamentId);
+        return [...others, ...enrolled];
+      });
       if (enrolled.length < 2) {
         return { success: false, message: "Se necesitan al menos 2 inscritos" };
       }
-      const already = matches.some((m) => m.tournamentId === tournamentId);
+      const cloudMatches = await fetchMatchesByTournament(tournamentId);
+      const already = cloudMatches.length > 0 || matches.some((m) => m.tournamentId === tournamentId);
       if (already) return { success: false, message: "Este torneo ya tiene partidos" };
 
       const tourney = tournaments.find((x) => x.id === tournamentId);
-      const byId = Object.fromEntries(enrolled.map((e) => [e.playerId, e]));
-      const ids = enrolled.map((e) => e.playerId);
+      const uniqueEnrolled = enrolled.filter(
+        (e, i, arr) => arr.findIndex((x) => x.playerId === e.playerId) === i
+      );
+      const byId = Object.fromEntries(uniqueEnrolled.map((e) => [e.playerId, e]));
+      const ids = uniqueEnrolled.map((e) => e.playerId);
       const created: Match[] = [];
 
       if (tourney?.format === "champions") {
@@ -368,6 +400,7 @@ const nextNum = Math.max(0, ...nums) + 1;
         setTournaments((prev) =>
           prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" } : t))
         );
+        await insertMatches(created);
         return {
           success: true,
           message: `Fase liga: ${created.length} partidos. Cada uno juega ${games}.`,
@@ -395,10 +428,11 @@ const nextNum = Math.max(0, ...nums) + 1;
         setTournaments((prev) =>
           prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" } : t))
         );
+        await insertMatches(created);
         return { success: true, message: `Fase de grupos: ${created.length} partidos en ${use.length} grupos.` };
       }
 
-      const shuffled = [...enrolled].sort(() => Math.random() - 0.5);
+      const shuffled = [...uniqueEnrolled].sort(() => Math.random() - 0.5);
       const twoLegs = tourney?.legs === 2 || tourney?.format === "ida_vuelta";
       for (let i = 0; i < shuffled.length - 1; i += 2) {
         const a = shuffled[i];
@@ -410,6 +444,7 @@ const nextNum = Math.max(0, ...nums) + 1;
       setTournaments((prev) =>
         prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" } : t))
       );
+      await insertMatches(created);
       return { success: true, message: `${created.length} partidos creados` };
     },
     [enrollments, matches, tournaments]
@@ -504,7 +539,7 @@ const nextNum = Math.max(0, ...nums) + 1;
         }
         const nextKo =
           currentKo === "Octavos" ? "Cuartos" : currentKo === "Cuartos" ? "Semis" : currentKo === "Semis" ? "Final" : null;
-        if (nextKo) {
+        if (nextKo && currentKo) {
           const last = tMatches.filter((m) => m.round.includes(currentKo));
           const groups = new Map<string, Match[]>();
           last.forEach((m) => {

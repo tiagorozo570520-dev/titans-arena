@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
+import { enrolledCount } from "@/lib/enrollCount";
 import type { FormatType, Platform, TournamentStatus } from "@/lib/types";
 import { fileToDataUrl } from "@/lib/images";
 
@@ -114,6 +115,7 @@ export default function AdminPage() {
     tournaments,
     matches,
     teams,
+    enrollments,
     createTournament,
     addTeam,
     updateTeam,
@@ -338,14 +340,14 @@ export default function AdminPage() {
                   <div>
                     <div className="font-semibold text-sm">{t.name}</div>
                     <div className="text-xs text-[var(--titans-muted)]">
-                      {t.currentPlayers}/{t.maxPlayers} · {t.status}
+                      {enrolledCount(t.id, enrollments)}/{t.maxPlayers} · {t.status}
                     </div>
                   </div>
                   <button
                     type="button"
                     className="btn-titans-outline !py-1.5 !px-3 !text-[10px] shrink-0"
-                    onClick={() => {
-                      const r = generateFixtures(t.id);
+                    onClick={async () => {
+                      const r = await generateFixtures(t.id);
                       setMsg(r.message);
                     }}
                   >

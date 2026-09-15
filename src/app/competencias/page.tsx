@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
+import { enrolledCount } from "@/lib/enrollCount";
 
 const formats = [
   { name: "Liga", desc: "Todos contra todos. Clasificación por puntos.", icon: "📊" },
@@ -15,7 +16,7 @@ const formats = [
 ];
 
 export default function CompetenciasPage() {
-  const { tournaments } = useApp();
+  const { tournaments, enrollments } = useApp();
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 md:py-12">
@@ -60,7 +61,7 @@ export default function CompetenciasPage() {
             >
               <div className="font-bold text-lg">{t.name}</div>
               <div className="text-xs text-[var(--titans-muted)] mt-1 capitalize">
-                {t.format.replace(/_/g, " ")} · {t.currentPlayers}/{t.maxPlayers} jugadores
+                {t.format.replace(/_/g, " ")} · {enrolledCount(t.id, enrollments)}/{t.maxPlayers} inscritos
               </div>
               <div className="text-sm text-gold mt-2">{t.prize}</div>
             </Link>

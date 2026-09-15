@@ -289,6 +289,120 @@ export async function loadCloud(): Promise<CloudDump | null> {
   };
 }
 
+export async function findPlayerByLogin(q: string): Promise<Player | null> {
+  if (!supabaseEnabled || !supabase) return null;
+  const needle = q.trim().toLowerCase();
+  if (!needle) return null;
+  const { data, error } = await supabase.from("players").select("*");
+  if (error || !data) return null;
+  const found = data
+    .map(mapPlayer)
+    .find(
+      (p) =>
+        (p.email || "").toLowerCase() === needle ||
+        (p.gamertag || "").toLowerCase() === needle
+    );
+  return found || null;
+}
+
+
+export async function fetchEnrollments(): Promise<Enrollment[]> {
+  if (!supabaseEnabled || !supabase) return [];
+  const { data, error } = await supabase.from("enrollments").select("*");
+  if (error || !data) {
+    console.warn("Supabase enrollments:", error?.message);
+    return [];
+  }
+  return data.map(mapEnrollment);
+}
+
+export async function fetchEnrollmentsByTournament(tournamentId: string): Promise<Enrollment[]> {
+  if (!supabaseEnabled || !supabase) return [];
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("*")
+    .eq("tournament_id", tournamentId);
+  if (error || !data) {
+    console.warn("Supabase enrollments by tournament:", error?.message);
+    return [];
+  }
+  return data.map(mapEnrollment);
+}
+
+export async function findDuplicateEnrollments(): Promise<
+  { tournament_id: string; player_id: string; count: number; ids: string[] }[]
+> {
+  const rows = await fetchEnrollments();
+  const map = new Map<string, string[]>();
+  rows.forEach((e) => {
+    const k = `${e.tournamentId}::${e.playerId}`;
+    map.set(k, [...(map.get(k) || []), e.id]);
+  });
+  const dupes: { tournament_id: string; player_id: string; count: number; ids: string[] }[] = [];
+  map.forEach((ids, k) => {
+    if (ids.length > 1) {
+      const [tournament_id, player_id] = k.split("::");
+      dupes.push({ tournament_id, player_id, count: ids.length, ids });
+    }
+  });
+  return dupes;
+}
+
+export async function insertEnrollment(e: Enrollment) {
+  if (!supabaseEnabled || !supabase) return { ok: false, error: "Sin Supabase" };
+  const existing = await fetchEnrollmentsByTournament(e.tournamentId);
+  if (existing.some((row) => row.playerId === e.playerId)) {
+    return { ok: false, error: "duplicate" };
+  }
+  const { error } = await supabase.from("enrollments").insert(enrollmentRow(e));
+  if (error) {
+    const msg = error.message || "";
+    if (/duplicate|unique/i.test(msg)) return { ok: false, error: "duplicate" };
+    return { ok: false, error: msg };
+  }
+  return { ok: true, error: "" };
+}
+
+export async function insertTournament(t: Tournament) {
+  if (!supabaseEnabled || !supabase) return { ok: false, error: "Sin Supabase" };
+  const { error } = await supabase.from("tournaments").insert(tournamentRow(t));
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, error: "" };
+}
+
+export async function insertMatches(list: Match[]) {
+  if (!supabaseEnabled || !supabase || !list.length) return { ok: false, error: "Sin partidos" };
+  const { error } = await supabase.from("matches").insert(list.map(matchRow));
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, error: "" };
+}
+
+export async function fetchMatchesByTournament(tournamentId: string): Promise<Match[]> {
+  if (!supabaseEnabled || !supabase) return [];
+  const { data, error } = await supabase.from("matches").select("*").eq("tournament_id", tournamentId);
+  if (error || !data) return [];
+  return data.map(mapMatch);
+}
+
+export async function bumpTournamentCount(tournamentId: string, current: number) {
+  if (!supabaseEnabled || !supabase) return;
+  await supabase.from("tournaments").update({ current_players: current }).eq("id", tournamentId);
+}
+
+export async function nextTitansNumber(): Promise<number> {
+  if (!supabaseEnabled || !supabase) return 2;
+  const { data } = await supabase.from("players").select("titans_id");
+  const nums = (data || []).map((r) => parseInt(String(r.titans_id || "").replace(/\D/g, ""), 10) || 0);
+  return Math.max(1, ...nums) + 1;
+}
+
+export async function insertPlayer(p: Player) {
+  if (!supabaseEnabled || !supabase) return { ok: false, error: "no supabase" };
+  const { error } = await supabase.from("players").insert(playerRow(p));
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function saveCloud(dump: CloudDump) {
   if (!supabaseEnabled || !supabase) return;
   const ops = [
@@ -301,38 +415,4 @@ export async function saveCloud(dump: CloudDump) {
     dump.notifications.length ? supabase.from("notifications").upsert(dump.notifications.map(notifRow)) : null,
   ].filter(Boolean);
   await Promise.all(ops);
-}
-export async function findPlayerByLogin(q: string) {
-  const { supabase, supabaseEnabled } = await import("./supabase");
-  if (!supabaseEnabled || !supabase) return null;
-  const needle = q.trim().toLowerCase();
-  const { data, error } = await supabase.from("players").select("*");
-  if (error || !data) return null;
-  const found = data.find((r: { email?: string; gamertag?: string }) =>
-    String(r.email || "").toLowerCase() === needle ||
-    String(r.gamertag || "").toLowerCase() === needle
-  );
-  if (!found) return null;
-  return {
-    id: String(found.id),
-    titansId: String(found.titans_id || ""),
-    gamertag: String(found.gamertag || ""),
-    email: String(found.email || ""),
-    phone: found.phone || undefined,
-    platform: found.platform || "PS5",
-    country: String(found.country || ""),
-    rank: found.rank || "ROOKIE",
-    points: Number(found.points || 0),
-    wins: Number(found.wins || 0),
-    losses: Number(found.losses || 0),
-    draws: Number(found.draws || 0),
-    matches: Number(found.matches || 0),
-    goals: Number(found.goals || 0),
-    goalsAgainst: Number(found.goals_against || 0),
-    titles: Number(found.titles || 0),
-    trophies: Array.isArray(found.trophies) ? found.trophies : [],
-    currentStreak: Number(found.current_streak || 0),
-    isAdmin: Boolean(found.is_admin),
-    createdAt: String(found.created_at || ""),
-  };
 }

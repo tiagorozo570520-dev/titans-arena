@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import type { Tournament } from "@/lib/types";
+import { useApp } from "@/context/AppContext";
+import { enrolledCount } from "@/lib/enrollCount";
 
 const statusMap = {
   open: { label: "INSCRIPCIONES ABIERTAS", class: "badge-open" },
@@ -11,7 +13,9 @@ const statusMap = {
 };
 
 export default function TournamentCard({ tournament }: { tournament: Tournament }) {
+  const { enrollments } = useApp();
   const status = statusMap[tournament.status];
+  const inscribed = enrolledCount(tournament.id, enrollments);
 
   return (
     <div className="titans-card overflow-hidden group">
@@ -51,8 +55,8 @@ export default function TournamentCard({ tournament }: { tournament: Tournament 
 
         <div className="grid grid-cols-2 gap-2 text-xs text-[var(--titans-muted)] mb-4">
           <div>
-            <span className="text-white font-semibold">{tournament.currentPlayers}</span>/
-            {tournament.maxPlayers} jugadores
+            <span className="text-white font-semibold">{inscribed}</span>/
+            {tournament.maxPlayers} inscritos
           </div>
           <div>
             Premio: <span className="text-gold font-semibold">{tournament.prize}</span>
