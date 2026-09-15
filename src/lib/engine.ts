@@ -1,4 +1,5 @@
-import type { Enrollment, Match, Standing } from "@/lib/types";
+import type { Enrollment, Match, Standing, Player, Rank } from "@/lib/types";
+import { getRankFromPoints } from "@/data/mock";
 
 function pairKey(a: string, b: string) {
   return [a, b].sort().join("|");
@@ -206,4 +207,55 @@ export function groupRoundRobin(ids: string[]): [string, string][] {
     }
   }
   return pairs;
+}
+
+/** Career stats from confirmed matches only. Titles/trophies/admin stay on the player row. */
+export function careerFromConfirmed(players: Player[], matches: Match[]): Player[] {
+  const valid = matches.filter(
+    (m) => m.status === "confirmed" && m.scoreA != null && m.scoreB != null
+  );
+  return players.map((p) => {
+    let points = 0;
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
+    let played = 0;
+    let goals = 0;
+    let goalsAgainst = 0;
+    let streak = 0;
+    valid.forEach((m) => {
+      if (p.id !== m.playerAId && p.id !== m.playerBId) return;
+      const isA = p.id === m.playerAId;
+      const gf = isA ? (m.scoreA as number) : (m.scoreB as number);
+      const ga = isA ? (m.scoreB as number) : (m.scoreA as number);
+      played += 1;
+      goals += gf;
+      goalsAgainst += ga;
+      if (gf > ga) {
+        wins += 1;
+        points += 25;
+        streak = Math.max(streak, 0) + 1;
+      } else if (gf === ga) {
+        draws += 1;
+        points += 8;
+        streak = 0;
+      } else {
+        losses += 1;
+        points += 5;
+        streak = 0;
+      }
+    });
+    return {
+      ...p,
+      points,
+      wins,
+      draws,
+      losses,
+      matches: played,
+      goals,
+      goalsAgainst,
+      currentStreak: streak,
+      rank: getRankFromPoints(points) as Rank,
+    };
+  });
 }

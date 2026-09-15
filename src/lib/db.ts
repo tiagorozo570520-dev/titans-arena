@@ -398,6 +398,13 @@ export async function fetchMatchesByTournament(tournamentId: string): Promise<Ma
   return data.map(mapMatch);
 }
 
+export async function updateMatch(m: Match) {
+  if (!supabaseEnabled || !supabase) return { ok: false, error: "Sin Supabase" };
+  const { error } = await supabase.from("matches").update(matchRow(m)).eq("id", m.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, error: "" };
+}
+
 export async function bumpTournamentCount(tournamentId: string, current: number) {
   if (!supabaseEnabled || !supabase) return;
   await supabase.from("tournaments").update({ current_players: current }).eq("id", tournamentId);

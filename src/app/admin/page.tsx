@@ -125,9 +125,13 @@ export default function AdminPage() {
     resetAllData,
     updatePlayer,
     confirmResult,
+    adminCorrectResult,
+    adminReopenMatch,
+    adminVoidMatch,
   } = useApp();
   const router = useRouter();
-  const [tab, setTab] = useState<"overview" | "create" | "teams">("overview");
+  const [tab, setTab] = useState<"overview" | "create" | "teams" | "results">("overview");
+  const [editScore, setEditScore] = useState<Record<string, { a: string; b: string }>>({});
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
@@ -250,6 +254,7 @@ export default function AdminPage() {
           { key: "overview" as const, label: "Resumen" },
           { key: "create" as const, label: "+ Crear Torneo" },
           { key: "teams" as const, label: "Equipos" },
+          { key: "results" as const, label: "Resultados" },
         ].map((t) => (
           <button
             key={t.key}
@@ -373,6 +378,85 @@ export default function AdminPage() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === "results" && (
+        <div className="space-y-3">
+          <h2 className="font-bold text-gold">Control de resultados</h2>
+          <p className="text-xs text-[var(--titans-muted)]">
+            Corregir, reabrir, anular o confirmar. Las tablas se recalculan solo con partidos confirmados.
+          </p>
+          {matches.length === 0 && (
+            <p className="text-sm text-[var(--titans-muted)]">No hay partidos.</p>
+          )}
+          {matches.map((m) => {
+            const a = players.find((p) => p.id === m.playerAId)?.gamertag || m.playerAId;
+            const b = players.find((p) => p.id === m.playerBId)?.gamertag || m.playerBId;
+            const tour = tournaments.find((t) => t.id === m.tournamentId)?.name || m.tournamentId;
+            const draft = editScore[m.id] || { a: String(m.scoreA ?? ""), b: String(m.scoreB ?? "") };
+            return (
+              <div key={m.id} className="titans-card p-4 space-y-2">
+                <div className="flex justify-between gap-2 text-xs">
+                  <span className="text-[var(--titans-muted)] truncate">{tour} · {m.round}</span>
+                  <span className="uppercase font-semibold text-gold">{m.status}</span>
+                </div>
+                <div className="font-semibold text-sm">
+                  {a} {m.scoreA ?? "-"} : {m.scoreB ?? "-"} {b}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-14 bg-white/5 rounded px-2 py-1 text-sm"
+                    value={draft.a}
+                    onChange={(e) => setEditScore((s) => ({ ...s, [m.id]: { ...draft, a: e.target.value } }))}
+                  />
+                  <span className="text-[var(--titans-muted)]">-</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-14 bg-white/5 rounded px-2 py-1 text-sm"
+                    value={draft.b}
+                    onChange={(e) => setEditScore((s) => ({ ...s, [m.id]: { ...draft, b: e.target.value } }))}
+                  />
+                  <button
+                    type="button"
+                    className="btn-titans !py-1 !px-2 !text-[10px]"
+                    onClick={async () => {
+                      const r = await adminCorrectResult(m.id, parseInt(draft.a, 10), parseInt(draft.b, 10));
+                      setMsg(r.message);
+                    }}
+                  >
+                    Corregir
+                  </button>
+                  {m.status === "reported" || m.status === "disputed" ? (
+                    <button
+                      type="button"
+                      className="btn-titans-outline !py-1 !px-2 !text-[10px]"
+                      onClick={async () => setMsg((await confirmResult(m.id)).message)}
+                    >
+                      Confirmar
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn-titans-outline !py-1 !px-2 !text-[10px]"
+                    onClick={async () => setMsg((await adminReopenMatch(m.id)).message)}
+                  >
+                    Reabrir
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[10px] text-[var(--titans-danger)]"
+                    onClick={async () => setMsg((await adminVoidMatch(m.id)).message)}
+                  >
+                    Anular
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

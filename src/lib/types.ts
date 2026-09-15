@@ -88,7 +88,7 @@ export interface Match {
   playerBId: string;
   scoreA?: number;
   scoreB?: number;
-  status: "pending" | "reported" | "confirmed" | "disputed";
+  status: "pending" | "reported" | "confirmed" | "disputed" | "voided";
   reportedBy?: string;
   screenshot?: string;
   teamAId?: string;

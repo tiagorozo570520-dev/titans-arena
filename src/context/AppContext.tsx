@@ -33,6 +33,7 @@ import {
   fetchMatchesByTournament,
   fetchTournament,
   updateTournamentStatus,
+  updateMatch,
 } from "@/lib/db";
 import {
   aggregateWinner,
@@ -42,6 +43,7 @@ import {
   groupRoundRobin,
   makeMatch,
   twoLegMatches,
+  careerFromConfirmed,
 } from "@/lib/engine";
 
 const STORAGE_KEY = "titans-arena-db-v1";
@@ -65,9 +67,12 @@ interface AppContextType extends AppState {
   register: (data: Partial<Player> & { email: string; gamertag: string; password: string; phone?: string }) => boolean;
   enrollInTournament: (tournamentId: string, teamId?: string) => Promise<{ success: boolean; message: string }>;
   createTournament: (data: Partial<Tournament>) => void;
-  reportResult: (matchId: string, scoreA: number, scoreB: number) => void;
-  confirmResult: (matchId: string) => void;
-  disputeResult: (matchId: string) => void;
+  reportResult: (matchId: string, scoreA: number, scoreB: number) => Promise<{ success: boolean; message: string }>;
+  confirmResult: (matchId: string) => Promise<{ success: boolean; message: string }>;
+  disputeResult: (matchId: string) => Promise<{ success: boolean; message: string }>;
+  adminCorrectResult: (matchId: string, scoreA: number, scoreB: number) => Promise<{ success: boolean; message: string }>;
+  adminReopenMatch: (matchId: string) => Promise<{ success: boolean; message: string }>;
+  adminVoidMatch: (matchId: string) => Promise<{ success: boolean; message: string }>;
   addTeam: (team: Omit<Team, "id">) => void;
   updateTeam: (id: string, data: Partial<Team>) => void;
   updatePlayer: (id: string, data: Partial<Player>) => void;
@@ -129,7 +134,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const src = cloud || saved;
       if (!cancelled && src) {
         if (cloud) {
-          setPlayers(cloud.players.length ? cloud.players : seedPlayers);
+          const basePlayers = cloud.players.length ? cloud.players : seedPlayers;
+          setPlayers(careerFromConfirmed(basePlayers, cloud.matches));
           setTournaments(cloud.tournaments);
           setTeams(cloud.teams.length ? cloud.teams : seedTeams);
           setEnrollments(cloud.enrollments);
@@ -323,57 +329,128 @@ export function AppProvider({ children }: { children: ReactNode }) {
     insertTournament(newT).catch((err) => console.warn("insertTournament", err));
   }, [currentUser, teams]);
 
-  const reportResult = useCallback((matchId: string, scoreA: number, scoreB: number) => {
-    setMatches((prev) =>
-      prev.map((m) =>
-        m.id === matchId
-          ? { ...m, scoreA, scoreB, status: "reported", reportedBy: currentUser?.id }
-          : m
-      )
-    );
-  }, [currentUser]);
-
-  const applyConfirmedStats = (m: Match) => {
-    const a = m.scoreA ?? 0;
-    const b = m.scoreB ?? 0;
-    setPlayers((prev) =>
-      prev.map((p) => {
-        if (p.id !== m.playerAId && p.id !== m.playerBId) return p;
-        const isA = p.id === m.playerAId;
-        const gf = isA ? a : b;
-        const ga = isA ? b : a;
-        const win = gf > ga;
-        const draw = gf === ga;
-        const pts = p.points + (win ? 25 : draw ? 8 : 5);
-        return {
-          ...p,
-          matches: p.matches + 1,
-          wins: p.wins + (win ? 1 : 0),
-          draws: p.draws + (draw ? 1 : 0),
-          losses: p.losses + (!win && !draw ? 1 : 0),
-          goals: p.goals + gf,
-          goalsAgainst: p.goalsAgainst + ga,
-          points: pts,
-          currentStreak: win ? Math.max(p.currentStreak, 0) + 1 : 0,
-          rank: getRankFromPoints(pts) as Rank,
-        };
-      })
-    );
-  };
-
-  const confirmResult = useCallback((matchId: string) => {
-    setMatches((prev) => {
-      const found = prev.find((m) => m.id === matchId);
-      if (found && found.status !== "confirmed") applyConfirmedStats(found);
-      return prev.map((m) => (m.id === matchId ? { ...m, status: "confirmed" as const } : m));
-    });
+  const commitMatch = useCallback(async (next: Match, list: Match[]) => {
+    const saved = await updateMatch(next);
+    if (!saved.ok) return { success: false as const, message: saved.error || "No se guardó el partido" };
+    setMatches(list);
+    setPlayers((prev) => careerFromConfirmed(prev, list));
+    return { success: true as const, message: "OK" };
   }, []);
 
-  const disputeResult = useCallback((matchId: string) => {
-    setMatches((prev) =>
-      prev.map((m) => (m.id === matchId ? { ...m, status: "disputed" as const } : m))
-    );
-  }, []);
+  const reportResult = useCallback(
+    async (matchId: string, scoreA: number, scoreB: number) => {
+      if (!currentUser) return { success: false, message: "Debes iniciar sesión" };
+      const m = matches.find((x) => x.id === matchId);
+      if (!m) return { success: false, message: "Partido no encontrado" };
+      if (currentUser.id !== m.playerAId && currentUser.id !== m.playerBId && !currentUser.isAdmin) {
+        return { success: false, message: "No participas en este partido" };
+      }
+      if (m.status === "confirmed" || m.status === "voided") {
+        return { success: false, message: "Este partido ya no admite reporte" };
+      }
+      if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB) || scoreA < 0 || scoreB < 0) {
+        return { success: false, message: "Marcador inválido" };
+      }
+      const next: Match = {
+        ...m,
+        scoreA,
+        scoreB,
+        status: "reported",
+        reportedBy: currentUser.id,
+      };
+      const list = matches.map((x) => (x.id === matchId ? next : x));
+      const r = await commitMatch(next, list);
+      return r.success ? { success: true, message: "Resultado reportado" } : r;
+    },
+    [currentUser, matches, commitMatch]
+  );
+
+  const confirmResult = useCallback(
+    async (matchId: string) => {
+      if (!currentUser) return { success: false, message: "Debes iniciar sesión" };
+      const m = matches.find((x) => x.id === matchId);
+      if (!m) return { success: false, message: "Partido no encontrado" };
+      const isPlayer = currentUser.id === m.playerAId || currentUser.id === m.playerBId;
+      if (!currentUser.isAdmin && !isPlayer) {
+        return { success: false, message: "No participas en este partido" };
+      }
+      if (!currentUser.isAdmin && m.reportedBy && m.reportedBy === currentUser.id) {
+        return { success: false, message: "El rival debe confirmar" };
+      }
+      if (m.status === "voided") return { success: false, message: "Partido anulado" };
+      if (m.scoreA == null || m.scoreB == null) return { success: false, message: "No hay marcador" };
+      const next: Match = { ...m, status: "confirmed" };
+      const list = matches.map((x) => (x.id === matchId ? next : x));
+      const r = await commitMatch(next, list);
+      return r.success ? { success: true, message: "Resultado confirmado" } : r;
+    },
+    [currentUser, matches, commitMatch]
+  );
+
+  const disputeResult = useCallback(
+    async (matchId: string) => {
+      if (!currentUser) return { success: false, message: "Debes iniciar sesión" };
+      const m = matches.find((x) => x.id === matchId);
+      if (!m) return { success: false, message: "Partido no encontrado" };
+      const isPlayer = currentUser.id === m.playerAId || currentUser.id === m.playerBId;
+      if (!currentUser.isAdmin && !isPlayer) {
+        return { success: false, message: "No participas en este partido" };
+      }
+      const next: Match = { ...m, status: "disputed" };
+      const list = matches.map((x) => (x.id === matchId ? next : x));
+      const r = await commitMatch(next, list);
+      return r.success ? { success: true, message: "Resultado disputado" } : r;
+    },
+    [currentUser, matches, commitMatch]
+  );
+
+  const adminCorrectResult = useCallback(
+    async (matchId: string, scoreA: number, scoreB: number) => {
+      if (!currentUser?.isAdmin) return { success: false, message: "Solo admin" };
+      const m = matches.find((x) => x.id === matchId);
+      if (!m) return { success: false, message: "Partido no encontrado" };
+      if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB) || scoreA < 0 || scoreB < 0) {
+        return { success: false, message: "Marcador inválido" };
+      }
+      const next: Match = {
+        ...m,
+        scoreA,
+        scoreB,
+        status: "confirmed",
+        reportedBy: currentUser.id,
+      };
+      const list = matches.map((x) => (x.id === matchId ? next : x));
+      const r = await commitMatch(next, list);
+      return r.success ? { success: true, message: "Resultado corregido y confirmado" } : r;
+    },
+    [currentUser, matches, commitMatch]
+  );
+
+  const adminReopenMatch = useCallback(
+    async (matchId: string) => {
+      if (!currentUser?.isAdmin) return { success: false, message: "Solo admin" };
+      const m = matches.find((x) => x.id === matchId);
+      if (!m) return { success: false, message: "Partido no encontrado" };
+      const next: Match = { ...m, status: m.scoreA != null ? "reported" : "pending" };
+      const list = matches.map((x) => (x.id === matchId ? next : x));
+      const r = await commitMatch(next, list);
+      return r.success ? { success: true, message: "Partido reabierto" } : r;
+    },
+    [currentUser, matches, commitMatch]
+  );
+
+  const adminVoidMatch = useCallback(
+    async (matchId: string) => {
+      if (!currentUser?.isAdmin) return { success: false, message: "Solo admin" };
+      const m = matches.find((x) => x.id === matchId);
+      if (!m) return { success: false, message: "Partido no encontrado" };
+      const next: Match = { ...m, status: "voided" };
+      const list = matches.map((x) => (x.id === matchId ? next : x));
+      const r = await commitMatch(next, list);
+      return r.success ? { success: true, message: "Partido anulado" } : r;
+    },
+    [currentUser, matches, commitMatch]
+  );
 
   const generateFixtures = useCallback(
     async (tournamentId: string) => {
@@ -778,6 +855,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         reportResult,
         confirmResult,
         disputeResult,
+        adminCorrectResult,
+        adminReopenMatch,
+        adminVoidMatch,
         addTeam,
         updateTeam,
         updatePlayer,
