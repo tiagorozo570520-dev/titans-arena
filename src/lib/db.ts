@@ -377,6 +377,20 @@ export async function insertMatches(list: Match[]) {
   return { ok: true, error: "" };
 }
 
+export async function fetchTournament(id: string): Promise<Tournament | null> {
+  if (!supabaseEnabled || !supabase) return null;
+  const { data, error } = await supabase.from("tournaments").select("*").eq("id", id).maybeSingle();
+  if (error || !data) return null;
+  return mapTournament(data);
+}
+
+export async function updateTournamentStatus(id: string, status: TournamentStatus) {
+  if (!supabaseEnabled || !supabase) return { ok: false, error: "Sin Supabase" };
+  const { error } = await supabase.from("tournaments").update({ status }).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, error: "" };
+}
+
 export async function fetchMatchesByTournament(tournamentId: string): Promise<Match[]> {
   if (!supabaseEnabled || !supabase) return [];
   const { data, error } = await supabase.from("matches").select("*").eq("tournament_id", tournamentId);

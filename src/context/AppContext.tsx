@@ -31,6 +31,8 @@ import {
   insertTournament,
   insertMatches,
   fetchMatchesByTournament,
+  fetchTournament,
+  updateTournamentStatus,
 } from "@/lib/db";
 import {
   aggregateWinner,
@@ -237,9 +239,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const enrollInTournament = useCallback(
     async (tournamentId: string, teamId?: string) => {
       if (!currentUser) return { success: false, message: "Debes iniciar sesión" };
-      const tournament = tournaments.find((t) => t.id === tournamentId);
+      const cloudT = await fetchTournament(tournamentId);
+      const tournament = cloudT || tournaments.find((t) => t.id === tournamentId);
       if (!tournament) return { success: false, message: "Torneo no encontrado" };
-      if (tournament.status !== "open") return { success: false, message: "Inscripciones cerradas" };
+      if (cloudT) {
+        setTournaments((prev) => prev.map((t) => (t.id === tournamentId ? { ...t, status: cloudT.status } : t)));
+      }
+      if (tournament.status !== "open") {
+        return { success: false, message: "Las inscripciones para este torneo están cerradas." };
+      }
 
       const live = await fetchEnrollments();
       const mine = live.filter((e) => e.tournamentId === tournamentId);
@@ -369,6 +377,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const generateFixtures = useCallback(
     async (tournamentId: string) => {
+      const markLive = async () => {
+        const st = await updateTournamentStatus(tournamentId, "live");
+        if (!st.ok) return st;
+        setTournaments((prev) =>
+          prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" as const } : t))
+        );
+        return st;
+      };
+
       const enrolled = await fetchEnrollmentsByTournament(tournamentId);
       setEnrollments((prev) => {
         const others = prev.filter((e) => e.tournamentId !== tournamentId);
@@ -378,8 +395,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { success: false, message: "Se necesitan al menos 2 inscritos" };
       }
       const cloudMatches = await fetchMatchesByTournament(tournamentId);
-      const already = cloudMatches.length > 0 || matches.some((m) => m.tournamentId === tournamentId);
-      if (already) return { success: false, message: "Este torneo ya tiene partidos" };
+      if (cloudMatches.length > 0) {
+        await markLive();
+        return { success: false, message: "Este torneo ya tiene partidos. Inscripciones cerradas." };
+      }
 
       const tourney = tournaments.find((x) => x.id === tournamentId);
       const uniqueEnrolled = enrolled.filter(
@@ -396,11 +415,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pairs.forEach(([a, b], i) => {
           created.push(makeMatch(tournamentId, "Fase Liga", byId[a], byId[b], `liga-${i}`));
         });
+        const saved = await insertMatches(created);
+        if (!saved.ok) {
+          return { success: false, message: "No se pudieron guardar los partidos: " + saved.error };
+        }
         setMatches((prev) => [...prev, ...created]);
-        setTournaments((prev) =>
-          prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" } : t))
-        );
-        await insertMatches(created);
+        const live = await markLive();
+        if (!live.ok) {
+          return { success: false, message: "Partidos creados, pero no se cerró inscripción: " + live.error };
+        }
         return {
           success: true,
           message: `Fase liga: ${created.length} partidos. Cada uno juega ${games}.`,
@@ -424,11 +447,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             created.push(makeMatch(tournamentId, g.name, byId[a], byId[b], `${g.name}-${i}`));
           });
         });
+        const savedG = await insertMatches(created);
+        if (!savedG.ok) {
+          return { success: false, message: "No se pudieron guardar los partidos: " + savedG.error };
+        }
         setMatches((prev) => [...prev, ...created]);
-        setTournaments((prev) =>
-          prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" } : t))
-        );
-        await insertMatches(created);
+        const liveG = await markLive();
+        if (!liveG.ok) {
+          return { success: false, message: "Partidos creados, pero no se cerró inscripción: " + liveG.error };
+        }
         return { success: true, message: `Fase de grupos: ${created.length} partidos en ${use.length} grupos.` };
       }
 
@@ -440,11 +467,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (twoLegs) created.push(...twoLegMatches(tournamentId, "Ronda 1", a, b, i));
         else created.push(makeMatch(tournamentId, "Ronda 1", a, b, `${i}`));
       }
+      const savedK = await insertMatches(created);
+      if (!savedK.ok) {
+        return { success: false, message: "No se pudieron guardar los partidos: " + savedK.error };
+      }
       setMatches((prev) => [...prev, ...created]);
-      setTournaments((prev) =>
-        prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" } : t))
-      );
-      await insertMatches(created);
+      const liveK = await markLive();
+      if (!liveK.ok) {
+        return { success: false, message: "Partidos creados, pero no se cerró inscripción: " + liveK.error };
+      }
       return { success: true, message: `${created.length} partidos creados` };
     },
     [enrollments, matches, tournaments]

@@ -280,7 +280,7 @@ export default function TournamentDetailPage({
             </div>
           ) : (
             <div className="text-center text-[var(--titans-muted)] text-sm py-4">
-              Las inscripciones no están abiertas para este torneo.
+              Las inscripciones para este torneo están cerradas.
             </div>
           )}
         </div>
