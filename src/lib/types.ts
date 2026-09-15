@@ -13,6 +13,18 @@ export type FormatType =
   | "2vs2"
   | "relampago";
 
+/** Fase competitiva persistida. El motor decide la siguiente. */
+export type CompetitionPhase =
+  | "draw"
+  | "league"
+  | "group"
+  | "r32"
+  | "r16"
+  | "qf"
+  | "sf"
+  | "final"
+  | "done";
+
 export interface Team {
   id: string;
   name: string;
@@ -74,6 +86,10 @@ export interface Tournament {
   legs?: 1 | 2;
   groupCount?: number;
   qualifyPerGroup?: number;
+  /** Fase del motor universal (4.0). Ausente = inferir. */
+  currentPhase?: CompetitionPhase;
+  /** Distribución de grupos congelada. */
+  drawLocked?: boolean;
   primaryColor?: string;
   secondaryColor?: string;
   createdBy: string;
@@ -94,6 +110,8 @@ export interface Match {
   teamAId?: string;
   teamBId?: string;
   scheduledAt?: string;
+  /** Jornada organizativa. No bloquea el orden de juego. */
+  matchday?: number;
 }
 
 export interface Enrollment {
@@ -102,6 +120,8 @@ export interface Enrollment {
   playerId: string;
   teamId?: string;
   position?: number;
+  /** Grupo A–H u otro código del formato. */
+  groupKey?: string;
   joinedAt: string;
 }
 

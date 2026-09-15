@@ -199,6 +199,60 @@ export function buildMundialGroups(ids: string[]): { name: string; ids: string[]
   return groups.filter((g) => g.ids.length >= 2);
 }
 
+export function expectedLeagueMatchCount(n: number, legs: 1 | 2 = 1): number {
+  if (n < 2) return 0;
+  const one = (n * (n - 1)) / 2;
+  return legs === 2 ? one * 2 : one;
+}
+
+export type LeagueFixture = {
+  playerAId: string;
+  playerBId: string;
+  matchday: number;
+  leg: 1 | 2;
+};
+
+/** Circle method. BYE if odd. No self matches. One match per player per matchday. */
+export function buildLeagueRoundRobin(ids: string[], legs: 1 | 2 = 1): LeagueFixture[] {
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (uniq.length < 2) return [];
+  const bye = "__BYE__";
+  const teams = uniq.length % 2 === 1 ? [...uniq, bye] : [...uniq];
+  const n = teams.length;
+  const rounds = n - 1;
+  const half = n / 2;
+  const rotation = [...teams];
+  const first: LeagueFixture[] = [];
+
+  for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < half; i++) {
+      const a = rotation[i];
+      const b = rotation[n - 1 - i];
+      if (a === bye || b === bye) continue;
+      const homeAway = r % 2 === 0;
+      first.push({
+        playerAId: homeAway ? a : b,
+        playerBId: homeAway ? b : a,
+        matchday: r + 1,
+        leg: 1,
+      });
+    }
+    const fixed = rotation[0];
+    const rest = rotation.slice(1);
+    rest.unshift(rest.pop() as string);
+    rotation.splice(0, rotation.length, fixed, ...rest);
+  }
+
+  if (legs === 1) return first;
+  const second: LeagueFixture[] = first.map((m) => ({
+    playerAId: m.playerBId,
+    playerBId: m.playerAId,
+    matchday: m.matchday + rounds,
+    leg: 2,
+  }));
+  return [...first, ...second];
+}
+
 export function groupRoundRobin(ids: string[]): [string, string][] {
   const pairs: [string, string][] = [];
   for (let i = 0; i < ids.length; i++) {

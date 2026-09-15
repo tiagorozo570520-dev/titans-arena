@@ -38,6 +38,8 @@ import {
 import {
   aggregateWinner,
   buildLeaguePairs,
+  buildLeagueRoundRobin,
+  expectedLeagueMatchCount,
   buildMundialGroups,
   computeStandings,
   groupRoundRobin,
@@ -45,6 +47,7 @@ import {
   twoLegMatches,
   careerFromConfirmed,
 } from "@/lib/engine";
+import { isPhaseComplete, inferPhase } from "@/lib/competition";
 
 const STORAGE_KEY = "titans-arena-db-v1";
 const SESSION_KEY = "titans-arena-session-v1";
@@ -454,11 +457,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const generateFixtures = useCallback(
     async (tournamentId: string) => {
-      const markLive = async () => {
-        const st = await updateTournamentStatus(tournamentId, "live");
+      const markLive = async (phase?: string) => {
+        const st = await updateTournamentStatus(tournamentId, "live", phase);
         if (!st.ok) return st;
         setTournaments((prev) =>
-          prev.map((t) => (t.id === tournamentId ? { ...t, status: "live" as const } : t))
+          prev.map((t) =>
+            t.id === tournamentId
+              ? { ...t, status: "live" as const, currentPhase: (phase as Tournament["currentPhase"]) || t.currentPhase }
+              : t
+          )
         );
         return st;
       };
@@ -473,7 +480,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       const cloudMatches = await fetchMatchesByTournament(tournamentId);
       if (cloudMatches.length > 0) {
-        await markLive();
+        const t0 = tournaments.find((x) => x.id === tournamentId);
+        await markLive(t0?.format === "liga" ? "league" : undefined);
         return { success: false, message: "Este torneo ya tiene partidos. Inscripciones cerradas." };
       }
 
@@ -484,6 +492,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const byId = Object.fromEntries(uniqueEnrolled.map((e) => [e.playerId, e]));
       const ids = uniqueEnrolled.map((e) => e.playerId);
       const created: Match[] = [];
+
+      if (tourney?.format === "liga") {
+        const legs: 1 | 2 = tourney.legs === 2 ? 2 : 1;
+        const slots = buildLeagueRoundRobin(ids, legs);
+        const need = expectedLeagueMatchCount(ids.length, legs);
+        if (slots.length !== need) {
+          return { success: false, message: `Calendario inválido (${slots.length}/${need})` };
+        }
+        slots.forEach((s, i) => {
+          const m = makeMatch(tournamentId, `Jornada ${s.matchday}`, byId[s.playerAId], byId[s.playerBId], `lg-${i}`);
+          m.matchday = s.matchday;
+          created.push(m);
+        });
+        const savedL = await insertMatches(created);
+        if (!savedL.ok) {
+          return { success: false, message: "No se pudieron guardar los partidos: " + savedL.error };
+        }
+        setMatches((prev) => [...prev, ...created]);
+        const liveL = await markLive("league");
+        if (!liveL.ok) {
+          return { success: false, message: "Partidos creados, pero no se cerró inscripción: " + liveL.error };
+        }
+        return {
+          success: true,
+          message: `Liga: ${created.length} partidos en ${Math.max(...slots.map((s) => s.matchday))} jornadas.`,
+        };
+      }
 
       if (tourney?.format === "champions") {
         const games = Math.min(8, ids.length - 1);
@@ -760,9 +795,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!tourney) return { success: false, message: "Torneo no encontrado" };
       if (tourney.status === "finished") return { success: false, message: "Ya está finalizado" };
 
-      const tMatches = matches.filter((m) => m.tournamentId === tournamentId && m.status === "confirmed");
+      const allT = matches.filter((m) => m.tournamentId === tournamentId);
+      if (tourney.format === "liga") {
+        const phase = inferPhase(tourney, allT);
+        if (!isPhaseComplete("league", allT) && phase !== "done") {
+          return { success: false, message: "La liga aún no termina. Faltan partidos confirmados." };
+        }
+      }
+
+      const tMatches = allT.filter((m) => m.status === "confirmed");
       let championId = "";
-      if (tMatches.length) {
+      if (tourney.format === "liga") {
+        const ids = Array.from(new Set(allT.flatMap((m) => [m.playerAId, m.playerBId])));
+        championId = computeStandings(ids, allT)[0]?.playerId || "";
+      } else if (tMatches.length) {
         const last = tMatches[tMatches.length - 1];
         const a = last.scoreA ?? 0;
         const b = last.scoreB ?? 0;
@@ -774,8 +820,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!championId) return { success: false, message: "No hay campeón para asignar" };
 
       setTournaments((prev) =>
-        prev.map((t) => (t.id === tournamentId ? { ...t, status: "finished" as const } : t))
+        prev.map((t) =>
+          t.id === tournamentId ? { ...t, status: "finished" as const, currentPhase: "done" } : t
+        )
       );
+      updateTournamentStatus(tournamentId, "finished", "done").catch(() => {});
       setPlayers((prev) =>
         prev.map((p) => {
           if (p.id !== championId) return p;

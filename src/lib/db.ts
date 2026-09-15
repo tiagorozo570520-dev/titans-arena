@@ -124,6 +124,10 @@ function mapTournament(r: Record<string, unknown>): Tournament {
     availableTeams: Array.isArray(r.available_teams) ? (r.available_teams as string[]) : [],
     assignmentMode: (r.assignment_mode as Tournament["assignmentMode"]) || "free",
     legs: r.legs === 2 ? 2 : 1,
+    groupCount: r.group_count != null ? Number(r.group_count) : undefined,
+    qualifyPerGroup: r.qualify_per_group != null ? Number(r.qualify_per_group) : undefined,
+    currentPhase: (r.current_phase as Tournament["currentPhase"]) || undefined,
+    drawLocked: Boolean(r.draw_locked),
     primaryColor: (r.primary_color as string) || undefined,
     secondaryColor: (r.secondary_color as string) || undefined,
     createdBy: String(r.created_by || ""),
@@ -152,6 +156,8 @@ function tournamentRow(t: Tournament) {
     available_teams: t.availableTeams,
     assignment_mode: t.assignmentMode,
     legs: t.legs || 1,
+    current_phase: t.currentPhase || null,
+    draw_locked: t.drawLocked || false,
     primary_color: t.primaryColor || null,
     secondary_color: t.secondaryColor || null,
     created_by: t.createdBy,
@@ -166,6 +172,7 @@ function mapEnrollment(r: Record<string, unknown>): Enrollment {
     playerId: String(r.player_id || ""),
     teamId: (r.team_id as string) || undefined,
     position: r.position != null ? Number(r.position) : undefined,
+    groupKey: (r.group_key as string) || undefined,
     joinedAt: String(r.joined_at || ""),
   };
 }
@@ -177,6 +184,7 @@ function enrollmentRow(e: Enrollment) {
     player_id: e.playerId,
     team_id: e.teamId || null,
     position: e.position ?? null,
+    group_key: e.groupKey || null,
     joined_at: e.joinedAt,
   };
 }
@@ -196,6 +204,7 @@ function mapMatch(r: Record<string, unknown>): Match {
     teamAId: (r.team_a_id as string) || undefined,
     teamBId: (r.team_b_id as string) || undefined,
     scheduledAt: (r.scheduled_at as string) || undefined,
+    matchday: r.matchday != null ? Number(r.matchday) : undefined,
   };
 }
 
@@ -214,6 +223,7 @@ function matchRow(m: Match) {
     team_a_id: m.teamAId || null,
     team_b_id: m.teamBId || null,
     scheduled_at: m.scheduledAt || null,
+    matchday: m.matchday ?? null,
   };
 }
 
@@ -384,9 +394,15 @@ export async function fetchTournament(id: string): Promise<Tournament | null> {
   return mapTournament(data);
 }
 
-export async function updateTournamentStatus(id: string, status: TournamentStatus) {
+export async function updateTournamentStatus(
+  id: string,
+  status: TournamentStatus,
+  currentPhase?: string
+) {
   if (!supabaseEnabled || !supabase) return { ok: false, error: "Sin Supabase" };
-  const { error } = await supabase.from("tournaments").update({ status }).eq("id", id);
+  const patch: Record<string, unknown> = { status };
+  if (currentPhase) patch.current_phase = currentPhase;
+  const { error } = await supabase.from("tournaments").update(patch).eq("id", id);
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: "" };
 }

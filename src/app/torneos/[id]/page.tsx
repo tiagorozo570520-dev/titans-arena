@@ -153,6 +153,7 @@ export default function TournamentDetailPage({
             </div>
           </div>
 
+          {!(tournament.format === "liga" && (tournament.status === "live" || tournament.status === "finished")) && (
           <div className="mt-2 mb-6">
             <h2 className="font-bold text-gold mb-3 tracking-wide text-sm">PARTICIPANTES</h2>
             {roster.length === 0 ? (
@@ -188,6 +189,7 @@ export default function TournamentDetailPage({
               </div>
             )}
           </div>
+          )}
 
           {/* Rules toggle */}
           <button
@@ -287,7 +289,13 @@ export default function TournamentDetailPage({
 
         {(() => {
           const tMatches = matches.filter((m) => m.tournamentId === id);
-          const league = tMatches.filter((m) => m.round === "Fase Liga" || m.round.startsWith("Grupo"));
+          const league = tMatches.filter(
+            (m) =>
+              m.round === "Fase Liga" ||
+              m.round.startsWith("Grupo") ||
+              m.round.startsWith("Jornada") ||
+              tournament.format === "liga"
+          );
           const ids = Array.from(new Set(league.flatMap((m) => [m.playerAId, m.playerBId])));
           const table = ids.length ? computeStandings(ids, league) : [];
           const nameOf = (pid: string) => players.find((p) => p.id === pid)?.gamertag || pid;
@@ -303,6 +311,15 @@ export default function TournamentDetailPage({
                           <th>#</th>
                           <th>Jugador</th>
                           <th>PJ</th>
+                          {tournament.format === "liga" && (
+                            <>
+                              <th>PG</th>
+                              <th>PE</th>
+                              <th>PP</th>
+                              <th>GF</th>
+                              <th>GC</th>
+                            </>
+                          )}
                           <th>Pts</th>
                           <th>DG</th>
                         </tr>
@@ -313,6 +330,15 @@ export default function TournamentDetailPage({
                             <td className="text-[var(--titans-gold)]">{i + 1}</td>
                             <td>{nameOf(s.playerId)}</td>
                             <td>{s.played}</td>
+                            {tournament.format === "liga" && (
+                              <>
+                                <td>{s.wins}</td>
+                                <td>{s.draws}</td>
+                                <td>{s.losses}</td>
+                                <td>{s.gf}</td>
+                                <td>{s.gc}</td>
+                              </>
+                            )}
                             <td className="font-bold">{s.points}</td>
                             <td>{s.gd > 0 ? `+${s.gd}` : s.gd}</td>
                           </tr>
